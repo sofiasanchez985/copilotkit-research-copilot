@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Aurora theme — cool mint→lilac lit ground, frosted glass,
+   teal accent; Bricolage Grotesque (display) + Inter (body).
+   ============================================================ */
+:root {
+  --fg: #132a2b;
+  --muted: #5b7173;
+  --accent: #0d9488;
+  --accent-strong: #0f766e;
+  --accent-soft: rgba(13, 148, 136, 0.12);
+  --glass: rgba(255, 255, 255, 0.62);
+  --glass-2: rgba(255, 255, 255, 0.42);
+  --glass-border: rgba(255, 255, 255, 0.85);
+  --hair: rgba(19, 42, 43, 0.1);
+  --radius: 16px;
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(60% 60% at 12% 6%, rgba(45, 212, 191, 0.28), transparent 60%),
+    radial-gradient(55% 55% at 92% 12%, rgba(129, 140, 248, 0.24), transparent 60%),
+    radial-gradient(70% 60% at 78% 100%, rgba(94, 234, 212, 0.18), transparent 60%),
+    linear-gradient(140deg, #eef5f4 0%, #eef0fb 100%);
+  background-attachment: fixed;
+}
+
+/* --- reusable surface + type helpers --- */
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid var(--glass-border);
+}
+
+.glass-card {
+  background: var(--glass);
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 10px 30px -18px rgba(15, 60, 60, 0.45);
+}
+
+/* ============================================================
+   CopilotKit chat theming — its shadcn-style tokens live on
+   [data-copilotkit]; this file loads AFTER its stylesheet, so
+   these win. Retint the whole chat to the Aurora palette.
+   ============================================================ */
+[data-copilotkit] {
+  --background: transparent;
+  --foreground: #10302f;
+  --card: var(--glass);
+  --card-foreground: #10302f;
+  --popover: rgba(255, 255, 255, 0.9);
+  --popover-foreground: #10302f;
+  --primary: #0d9488;
+  --primary-foreground: #ffffff;
+  --secondary: rgba(13, 148, 136, 0.1);
+  --secondary-foreground: #0f766e;
+  --muted: rgba(19, 42, 43, 0.06);
+  --muted-foreground: #5b7173;
+  --accent: rgba(13, 148, 136, 0.12);
+  --accent-foreground: #0f766e;
+  --border: rgba(19, 42, 43, 0.12);
+  --input: rgba(255, 255, 255, 0.6);
+  --ring: #0d9488;
+  --radius: 0.9rem;
+  font-family: var(--font-body);
+}
+
+/* Shrink the chat's empty-state greeting to ~2/3 (24px → 16px). */
+[data-copilotkit] h1.cpk\:text-center {
+  font-size: 16px;
+}

@@ -1,0 +1,10 @@
+# AG-UI backend deps for the Research Copilot workshop.
+# The research agent itself (deepagents, langchain-google-genai, arxiv, tavily, …)
+# is installed separately by cloning + `pip install -e` the deep-agents-podcast repo
+# in the setup cell — this file is just what's needed to expose it over AG-UI.
+
+copilotkit==0.1.86
+ag-ui-langgraph
+fastapi
+uvicorn
+python-dotenv

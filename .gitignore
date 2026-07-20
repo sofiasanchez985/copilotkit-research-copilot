@@ -1,0 +1,22 @@
+# secrets
+.env
+deep-agents-podcast/.env
+
+# the agent is cloned at setup time, not vendored
+/deep-agents-podcast/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+library_memory.db*
+
+# node
+node_modules/
+frontend/dev-logs.txt
+frontend/.vite/
+frontend/dist/
+
+# editor / os
+.DS_Store
+.claude/
