@@ -304,7 +304,13 @@ def _read_library(store) -> list[dict]:
 
 def build_app() -> FastAPI:
     graph, store = build_graph()
+
+    # 1. A plain web server to host the agent — the door a browser can reach.
     app = FastAPI()
+
+    # 2. Wrap the LangGraph graph in an AG-UI adapter: it runs the graph and
+    #    translates its activity (text, tool calls, state, interrupts) into
+    #    standard AG-UI events. The graph itself is unchanged from Track 2.
     agent = LangGraphAGUIAgent(
         name="podcast_agent",
         description="Computational-longevity research agent that curates a paper library.",
@@ -313,6 +319,8 @@ def build_app() -> FastAPI:
         # default 25-step recursion limit; raise it so runs complete.
         config={"recursion_limit": 100},
     )
+
+    # 3. Mount the adapter as an HTTP/SSE endpoint the React frontend connects to.
     add_langgraph_fastapi_endpoint(app=app, agent=agent, path="/")
 
     @app.get("/library")
