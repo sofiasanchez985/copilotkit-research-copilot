@@ -17,7 +17,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
       <main className="h-screen w-screen">
-        <CopilotKit agents__unsafe_dev_only={{ default: podcastAgent }}>
+        <CopilotKit selfManagedAgents={{ default: podcastAgent }}>
           <App />
         </CopilotKit>
       </main>
