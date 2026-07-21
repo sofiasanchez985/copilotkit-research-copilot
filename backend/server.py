@@ -223,8 +223,22 @@ def _parse_library_papers(md: str) -> list[dict]:
 
 
 def _count_papers(md: str) -> int:
-    """Count distinct arXiv ids in a library file (version suffix normalized)."""
-    return len({_norm_id(m.group(1)) for m in _ARXIV_ID.finditer(md)})
+    """A best-effort paper count for a topic file.
+
+    Normally this is the number of distinct arXiv ids. But the count also drives
+    whether the shelf is shown, so we must never report 0 for a file that has
+    real content — otherwise editing a paper into a form without a clean
+    ``NNNN.NNNNN`` id would make its whole folder vanish. So: distinct ids if we
+    find any; else the number of entry headings; else 1 if there's any content;
+    else 0 (a truly-empty file, e.g. after removing the last paper) so it hides.
+    """
+    ids = {_norm_id(m.group(1)) for m in _ARXIV_ID.finditer(md)}
+    if ids:
+        return len(ids)
+    headings = len(re.findall(r"(?m)^#{1,3}\s+\S", md))
+    if headings:
+        return headings
+    return 1 if md.strip() else 0
 
 
 def _read_library(store) -> list[dict]:

@@ -90,6 +90,10 @@ export function ApprovalCard({
         ? (args.old_string as string) ?? (args.content as string) ?? ""
         : (args.new_string as string) ?? "";
 
+  // The editable field depends on the tool: write_file uses `content`,
+  // edit_file uses `new_string`. Edit the right one so "Save & file" actually
+  // applies to appends too (not just fresh writes).
+  const editKey = "content" in args ? "content" : "new_string" in args ? "new_string" : "content";
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(args.content ?? args.new_string ?? ""));
   const [done, setDone] = useState<null | "approve" | "edit" | "reject">(null);
@@ -162,7 +166,7 @@ export function ApprovalCard({
             ) : (
               <button
                 onClick={() => {
-                  resolve({ decisions: [{ type: "edit", edited_action: { name: toolName, args: { ...args, content: draft } } }] });
+                  resolve({ decisions: [{ type: "edit", edited_action: { name: toolName, args: { ...args, [editKey]: draft } } }] });
                   clearPendingIntent();
                   setDone("edit");
                 }}
