@@ -132,94 +132,117 @@ def _norm_id(arxiv_id: str) -> str:
     return re.sub(r"v\d+$", "", arxiv_id)
 
 
+def _clean_field(s: str | None) -> str | None:
+    """Strip markdown artifacts the model leaves in field values."""
+    if not s:
+        return s
+    s = s.replace("**", "").replace("`", "")
+    s = re.sub(r"^\s*\[[\w./:-]+\]\s*", "", s)  # leading "[2501.02401] "
+    s = re.sub(r"\s*\((?:arxiv:\s*)?[\w./-]+\)\s*$", "", s, flags=re.IGNORECASE)  # trailing "(id)"
+    return s.strip().strip("{},").strip("* ").strip()
+
+
+def _paper_from_block(block: str, norm_id: str) -> dict:
+    """Pull a title/authors/abstract out of one paper's text block."""
+    _FIELD_LABELS = ("id", "arxiv id", "authors", "author", "abstract", "title",
+                     "published", "year", "pdf", "pdf_url", "primary category",
+                     "primary_category", "url", "tags", "note")
+    lines = [ln.rstrip() for ln in block.splitlines() if ln.strip()]
+    title = ""
+    bib = re.search(r"title\s*=\s*\{(.+?)\}", block, re.IGNORECASE)
+    if bib:
+        title = bib.group(1).strip()
+    if not title:
+        for m in re.finditer(r"\*\*(.+?)\*\*", block):
+            cand = m.group(1).strip().rstrip(":")
+            if cand.lower() not in _FIELD_LABELS and len(cand) >= 8:
+                title = cand
+                break
+    if not title:
+        fm = re.search(r"(?m)^[-*\s]*\**title\**\s*:\s*(.+)$", block, re.IGNORECASE)
+        if fm:
+            title = fm.group(1).strip().strip("*")
+    if not title:
+        for ln in lines:
+            low = ln.lower().lstrip("#*- ")
+            if low.startswith(_FIELD_LABELS) or low.startswith(("@", "% ", "eprint", "archiveprefix")):
+                continue
+            cleaned = re.sub(r"^[#*\-\s]+", "", ln).replace("**", "").strip().strip("{},")
+            if cleaned.lower() in ("papers", "library") or len(cleaned) < 3:
+                continue
+            title = cleaned
+            break
+
+    def field(*names: str) -> str | None:
+        for name in names:
+            m = re.search(rf"{name}\**[^:\n]*[:=]\s*(.+)", block, re.IGNORECASE)
+            if m:
+                return _clean_field(m.group(1))
+        return None
+
+    abstract = None
+    am = re.search(r"abstract\**[^:\n]*[:\n]\s*(.+)", block, re.IGNORECASE | re.DOTALL)
+    if am:
+        abstract = _clean_field(" ".join(am.group(1).split())[:600])
+    return {
+        "id": norm_id,
+        "title": _clean_field(title) or norm_id,
+        "authors": field("authors", "author"),
+        "published": field("published", "year"),
+        "abstract": abstract,
+        "url": f"https://arxiv.org/abs/{norm_id}",
+    }
+
+
 def _parse_library_papers(md: str) -> list[dict]:
     """Best-effort parse of a topic file into individual papers (for card view).
 
-    The agent's file layout varies run to run (BibTeX, "# Title / - id:", "##
-    Title / - **ID**:", …), so we anchor on the arXiv id: split the file into
-    blocks around each id, then pull a title/authors/abstract from that block's
-    text however it's shaped. Robust rather than exact — good enough for cards,
-    and the UI falls back to raw markdown if this yields nothing.
+    The agent's layout varies run to run, and it often appends multiple papers
+    under one heading — so splitting on headings would merge them. Instead we
+    anchor on the arXiv id (one paper == one distinct id) and cut the file into
+    one block per id at the midpoints between consecutive ids, so every paper
+    becomes its own card regardless of the surrounding markdown shape.
     """
-    papers: list[dict] = []
+    ids: list[tuple[str, int]] = []
     seen: set[str] = set()
-    # Split into heading-delimited blocks; each paper usually sits under one.
-    blocks = re.split(r"(?m)^#{1,3}\s+", md)
-    for block in blocks:
-        idm = _ARXIV_ID.search(block)
-        if not idm:
-            continue
-        norm = _norm_id(idm.group(1))
+    for m in _ARXIV_ID.finditer(md):
+        norm = _norm_id(m.group(1))
         if norm in seen:
             continue
         seen.add(norm)
-        lines = [ln.rstrip() for ln in block.splitlines() if ln.strip()]
-        # Title extraction is best-effort across the many layouts the model uses
-        # (BibTeX, "# Title", "## Title / - **ID**:", "- **Title** (id)", …).
-        _FIELD_LABELS = ("id", "arxiv id", "authors", "author", "abstract", "title",
-                         "published", "year", "pdf", "pdf_url", "primary category",
-                         "primary_category", "url", "tags", "note")
-        title = ""
-        # 1. BibTeX `title = {...}`
-        bib = re.search(r"title\s*=\s*\{(.+?)\}", block, re.IGNORECASE)
-        if bib:
-            title = bib.group(1).strip()
-        # 2. First **bold** span that isn't a field label (catches "- **Title** (id)")
-        if not title:
-            for m in re.finditer(r"\*\*(.+?)\*\*", block):
-                cand = m.group(1).strip().rstrip(":")
-                if cand.lower() not in _FIELD_LABELS and len(cand) >= 8:
-                    title = cand
-                    break
-        # 3. Explicit `Title:` field
-        if not title:
-            fm = re.search(r"(?m)^[-*\s]*\**title\**\s*:\s*(.+)$", block, re.IGNORECASE)
-            if fm:
-                title = fm.group(1).strip().strip("*")
-        # 4. First line that isn't a field / bare section header
-        if not title:
-            for ln in lines:
-                low = ln.lower().lstrip("#*- ")
-                if low.startswith(_FIELD_LABELS) or low.startswith(("@", "% ", "eprint", "archiveprefix")):
-                    continue
-                cleaned = re.sub(r"^[#*\-\s]+", "", ln).replace("**", "").strip().strip("{},")
-                if cleaned.lower() in ("papers", "library") or len(cleaned) < 8:
-                    continue
-                title = cleaned
-                break
-        def clean(s: str | None) -> str | None:
-            """Strip markdown artifacts the model leaves in field values."""
-            if not s:
-                return s
-            s = s.replace("**", "").replace("`", "")
-            s = re.sub(r"^\s*\[[\w./:-]+\]\s*", "", s)  # leading "[2501.02401] "
-            s = re.sub(r"\s*\((?:arxiv:\s*)?[\w./-]+\)\s*$", "", s, flags=re.IGNORECASE)  # trailing "(id)"
-            return s.strip().strip("{},").strip("* ").strip()
+        ids.append((norm, m.start()))
+    if not ids:
+        return []
 
-        title = clean(title)
+    # A paper starts at its title — a heading or a bold-title bullet — which sits
+    # at or just before its id. Cut each entry at the nearest such "anchor" line
+    # before the id (not a naive midpoint), so titles + fields stay with the
+    # right paper even when several papers share one heading section.
+    # Anchors mark where a paper starts: a heading, or a bold-title bullet like
+    # "- **Real Title** (id)". Exclude bold *field* bullets ("- **ID**:",
+    # "- **Authors**:", …) — those are inside a paper, not a new one.
+    anchor_re = re.compile(
+        r"(?im)^[ \t]*(?:"
+        r"#{1,3}[ \t]+\S"
+        r"|[-*][ \t]*\*\*(?!\s*(?:id|arxiv[ _]?id|authors?|abstract|published|year|pdf|pdf_url|"
+        r"link|title|categor\w*|primary\w*|url|tags|note)\s*\*\*)"
+        r")"
+    )
+    anchors = [a.start() for a in anchor_re.finditer(md)]
 
-        def field(*names: str) -> str | None:
-            for name in names:
-                m = re.search(rf"{name}\**[^:\n]*[:=]\s*(.+)", block, re.IGNORECASE)
-                if m:
-                    return clean(m.group(1))
-            return None
+    starts: list[int] = []
+    prev = -1
+    for _norm, pos in ids:
+        line_start = md.rfind("\n", 0, pos) + 1
+        candidates = [a for a in anchors if prev < a <= line_start]
+        start = candidates[-1] if candidates else line_start
+        if start <= prev:  # keep boundaries strictly increasing
+            start = line_start if line_start > prev else prev + 1
+        starts.append(start)
+        prev = start
 
-        abstract = None
-        am = re.search(r"abstract\**[^:\n]*[:\n]\s*(.+)", block, re.IGNORECASE | re.DOTALL)
-        if am:
-            abstract = clean(" ".join(am.group(1).split())[:600])
-        papers.append(
-            {
-                "id": norm,
-                "title": title or norm,
-                "authors": field("authors", "author"),
-                "published": field("published", "year"),
-                "abstract": abstract,
-                "url": f"https://arxiv.org/abs/{norm}",
-            }
-        )
-    return papers
+    bounds = starts + [len(md)]
+    return [_paper_from_block(md[bounds[i]:bounds[i + 1]], ids[i][0]) for i in range(len(ids))]
 
 
 def _count_papers(md: str) -> int:
